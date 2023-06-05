@@ -66,16 +66,19 @@ void *jl_load_and_lookup(const char *f_lib, const char *f_name, _Atomic(void*) *
 extern "C" JL_DLLEXPORT
 void *jl_lazy_load_and_lookup(jl_value_t *lib_val, const char *f_name)
 {
-    char *f_lib;
+    void *lib_ptr;
 
     if (jl_is_symbol(lib_val))
-        f_lib = jl_symbol_name((jl_sym_t*)lib_val);
+        lib_ptr = jl_get_library(jl_symbol_name((jl_sym_t*)lib_val));
     else if (jl_is_string(lib_val))
-        f_lib = jl_string_data(lib_val);
-    else
+        lib_ptr = jl_get_library(jl_string_data(lib_val));
+    else if (jl_lazy_library_type != NULL && jl_libdl_dlopen_func != NULL && jl_isa(lib_val, (jl_value_t *)jl_lazy_library_type)) {
+        // Call `dlopen(lib_val)` if `lib_val` is a `LazyLibrary` object, use the returned handle as `lib_ptr`.
+        lib_ptr = *((void **)jl_apply_generic(jl_libdl_dlopen_func, &lib_val, 1));
+    } else
         jl_type_error("ccall", (jl_value_t*)jl_symbol_type, lib_val);
     void *ptr;
-    jl_dlsym(jl_get_library(f_lib), f_name, &ptr, 1);
+    jl_dlsym(lib_ptr, f_name, &ptr, 1);
     return ptr;
 }
 

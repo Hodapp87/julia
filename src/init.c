@@ -382,6 +382,7 @@ JL_DLLEXPORT void jl_postoutput_hook(void)
 }
 
 void post_boot_hooks(void);
+void post_image_load_hooks(void);
 
 JL_DLLEXPORT void *jl_libjulia_internal_handle;
 JL_DLLEXPORT void *jl_libjulia_handle;
@@ -888,6 +889,8 @@ static NOINLINE void _finish_julia_init(JL_IMAGE_SEARCH rel, jl_ptls_t ptls, jl_
             jl_module_run_initializer((jl_module_t*)mod);
         }
         JL_GC_POP();
+
+        post_image_load_hooks();
     }
 
     if (jl_options.handle_signals == JL_OPTIONS_HANDLE_SIGNALS_ON)
