@@ -1,7 +1,7 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 using Test
-import Libdl
+using Libdl
 
 # these could fail on an embedded installation
 # but for now, we don't handle that case
@@ -26,8 +26,6 @@ end
 # library handle pointer must not be NULL
 @test_throws ArgumentError Libdl.dlsym(C_NULL, :foo)
 @test_throws ArgumentError Libdl.dlsym_e(C_NULL, :foo)
-
-cd(@__DIR__) do
 
 # Find the library directory by finding the path of libjulia-internal (or libjulia-internal-debug,
 # as the case may be) to get the private library directory
@@ -267,4 +265,60 @@ mktempdir() do dir
     end
 end
 
+## Tests for LazyLibrary
+@testset "LazyLibrary" begin
+    default_rtld_flags = Base.Libc.Libdl.default_rtld_flags
+    # Ensure that `libccalltest` is not currently loaded
+    @test !any(contains.(dllist(), "libccalltest"))
+
+    # Create a `LazyLibrary` structure that loads `libccalltestdep`
+    global libccalltest_loaded = false
+    global libccalltestdep_loaded = false
+
+    # We don't provide `dlclose()` on `LazyLibrary`'s, you have to manage it yourself:
+    function close_libs()
+        global libccalltest_loaded = false
+        global libccalltestdep_loaded = false
+        if libccalltestdep.handle != C_NULL
+            dlclose(libccalltestdep.handle)
+        end
+        if libccalltest.handle != C_NULL
+            dlclose(libccalltest.handle)
+        end
+        @atomic libccalltest.handle = C_NULL
+        @atomic libccalltestdep.handle = C_NULL
+        @test !any(contains.(dllist(), "libccalltest"))
+    end
+
+    global libccalltest = LazyLibrary(joinpath(private_libdir, "libccalltest.$(Libdl.dlext)"), default_rtld_flags, LazyLibrary[], hdl -> global libccalltest_loaded = true)
+    global libccalltestdep = LazyLibrary(joinpath(private_libdir, "libccalltestdep.$(Libdl.dlext)"), default_rtld_flags, [libccalltest], hdl -> global libccalltestdep_loaded = true)
+
+    # Creating `LazyLibrary` doesn't actually load anything
+    @test !libccalltest_loaded
+    @test !libccalltestdep_loaded
+
+    # Explicitly calling `dlopen()` does:
+    dlopen(libccalltestdep)
+    @test libccalltest_loaded
+    @test libccalltestdep_loaded
+    close_libs()
+
+    # Test that the library gets loaded when you use `ccall()`
+    a = 20 + 51im
+    @test ccall((:ctest, libccalltestdep), Complex{Int}, (Complex{Int},), a) == a + 1 - 2im
+    @test libccalltest_loaded
+    @test libccalltestdep_loaded
+    close_libs()
+
+    # Test that `@ccall` works:
+    x = @ccall(libccalltestdep.ctest(a::Complex{Int})::Complex{Int})
+    @test x == a + 1 - 2im
+    @test libccalltest_loaded
+    @test libccalltestdep_loaded
+    close_libs()
+
+    # Test that `dlpath()` works
+    @test dlpath(libccalltest) == libccalltest.name
+    @test libccalltest_loaded
+    close_libs()
 end

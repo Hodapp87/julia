@@ -27,6 +27,8 @@ Compiler/Runtime improvements
 
 * The `@pure` macro is now deprecated. Use `Base.@assume_effects :foldable` instead ([#48682]).
 * The mark phase of the Garbage Collector is now multi-threaded ([#48600]).
+* A new `LazyLibrary` type is exported from `Libdl` for use in building chained lazy library
+  loads, primarily to be used within JLLs ([#50074]).
 
 Command-line option changes
 ---------------------------

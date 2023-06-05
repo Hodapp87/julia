@@ -84,6 +84,9 @@ julia-base: julia-deps $(build_sysconfdir)/julia/startup.jl $(build_man1dir)/jul
 julia-libccalltest: julia-deps
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src libccalltest
 
+julia-libccalltestdep: julia-deps julia-libccalltest
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src libccalltestdep
+
 julia-libllvmcalltest: julia-deps
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src libllvmcalltest
 
@@ -102,7 +105,7 @@ julia-sysimg-bc : julia-stdlib julia-base julia-cli-$(JULIA_BUILD_MODE) julia-sr
 julia-sysimg-release julia-sysimg-debug : julia-sysimg-% : julia-sysimg-ji julia-src-%
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f sysimage.mk sysimg-$*
 
-julia-debug julia-release : julia-% : julia-sysimg-% julia-src-% julia-symlink julia-libccalltest julia-libllvmcalltest julia-base-cache
+julia-debug julia-release : julia-% : julia-sysimg-% julia-src-% julia-symlink julia-libccalltest julia-libccalltestdep julia-libllvmcalltest julia-base-cache
 
 stdlibs-cache-release stdlibs-cache-debug : stdlibs-cache-% : julia-%
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f pkgimage.mk all-$*
@@ -189,7 +192,7 @@ JL_TARGETS := julia-debug
 endif
 
 # private libraries, that are installed in $(prefix)/lib/julia
-JL_PRIVATE_LIBS-0 := libccalltest libllvmcalltest
+JL_PRIVATE_LIBS-0 := libccalltest libccalltestdep libllvmcalltest
 ifeq ($(JULIA_BUILD_MODE),release)
 JL_PRIVATE_LIBS-0 += libjulia-internal libjulia-codegen
 else ifeq ($(JULIA_BUILD_MODE),debug)

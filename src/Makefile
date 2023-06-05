@@ -249,6 +249,7 @@ $(build_includedir)/julia/uv/*.h: $(LIBUV_INC)/uv/*.h | $(build_includedir)/juli
 	$(INSTALL_F) $^ $(build_includedir)/julia/uv
 
 libccalltest: $(build_shlibdir)/libccalltest.$(SHLIB_EXT)
+libccalltestdep: $(build_shlibdir)/libccalltestdep.$(SHLIB_EXT)
 libllvmcalltest: $(build_shlibdir)/libllvmcalltest.$(SHLIB_EXT)
 
 ifeq ($(OS), Linux)
@@ -257,7 +258,7 @@ else
 JULIA_SPLITDEBUG := 0
 endif
 $(build_shlibdir)/libccalltest.$(SHLIB_EXT): $(SRCDIR)/ccalltest.c
-	@$(call PRINT_CC, $(CC) $(JCFLAGS) $(JL_CFLAGS) $(JCPPFLAGS) $(FLAGS) -O3 $< $(fPIC) -shared -o $@.tmp $(LDFLAGS))
+	@$(call PRINT_CC, $(CC) $(JCFLAGS) $(JL_CFLAGS) $(JCPPFLAGS) $(FLAGS) -O3 $< $(fPIC) -shared -o $@.tmp $(LDFLAGS) $(call SONAME_FLAGS,libccalltest.$(SHLIB_EXT)))
 	$(INSTALL_NAME_CMD)libccalltest.$(SHLIB_EXT) $@.tmp
 ifeq ($(JULIA_SPLITDEBUG),1)
 	@# Create split debug info file for libccalltest stacktraces test
@@ -272,6 +273,9 @@ endif
 	@#rm -rf $@.dSYM && mv $@.tmp.dSYM $@.dSYM
 	mv $@.tmp $@
 	$(INSTALL_NAME_CMD)libccalltest.$(SHLIB_EXT) $@
+
+$(build_shlibdir)/libccalltestdep.$(SHLIB_EXT): $(SRCDIR)/ccalltestdep.c $(build_shlibdir)/libccalltest.$(SHLIB_EXT)
+	@$(call PRINT_CC, $(CC) $(JCFLAGS) $(JL_CFLAGS) $(JCPPFLAGS) $(FLAGS) -O3 $< $(fPIC) -shared -o $@ $(LDFLAGS) $(COMMON_LIBPATHS) $(call SONAME_FLAGS,libccalltestdep.$(SHLIB_EXT)) -lccalltest)
 
 $(build_shlibdir)/libllvmcalltest.$(SHLIB_EXT): $(SRCDIR)/llvmcalltest.cpp $(LLVM_CONFIG_ABSOLUTE)
 	@$(call PRINT_CC, $(CXX) $(LLVM_CXXFLAGS) $(FLAGS) $(CPPFLAGS) $(CXXFLAGS) -O3 $< $(fPIC) -shared -o $@ $(LDFLAGS) $(COMMON_LIBPATHS) $(NO_WHOLE_ARCHIVE) $(CG_LLVMLINK)) -lpthread
