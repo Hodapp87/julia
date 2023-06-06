@@ -266,10 +266,27 @@ mktempdir() do dir
 end
 
 ## Tests for LazyLibrary
-@testset "LazyLibrary" begin
+@testset "LazyLibrary" begin; mktempdir() do dir
+    # Create custom-named libccalltest libraries, to avoid failing these tests
+    # because some other test has already loaded `libccalltest` via `ccall()` or somesuch
+    lct_name  = "libcc4llt3st"
+    lct_path  = joinpath(dir, "$(lct_name).$(Libdl.dlext)")
+    lctd_path = joinpath(dir, "$(lct_name)dep.$(Libdl.dlext)")
+    cp(joinpath(private_libdir, "libccalltest.$(Libdl.dlext)"), lct_path)
+    cp(joinpath(private_libdir, "libccalltestdep.$(Libdl.dlext)"), lctd_path)
+    function str_replace(path, pairs::Pair...)
+        new_data = replace(String(read(path)), pairs...)
+        open(path; write=true) do io
+            write(io, new_data)
+        end
+    end
+    str_replace(lct_path, "libccalltest" => lct_name)
+    str_replace(lctd_path, "libccalltest" => lct_name)
+
     default_rtld_flags = Base.Libc.Libdl.default_rtld_flags
-    # Ensure that `libccalltest` is not currently loaded
-    @test !any(contains.(dllist(), "libccalltest"))
+    # Ensure that our modified copy of `libccalltest` is not currently loaded
+    @test !any(contains.(dllist(), lct_path))
+    @test !any(contains.(dllist(), lctd_path))
 
     # Create a `LazyLibrary` structure that loads `libccalltestdep`
     global libccalltest_loaded = false
@@ -287,11 +304,12 @@ end
         end
         @atomic libccalltest.handle = C_NULL
         @atomic libccalltestdep.handle = C_NULL
-        @test !any(contains.(dllist(), "libccalltest"))
+        @test !any(contains.(dllist(), lct_path))
+        @test !any(contains.(dllist(), lctd_path))
     end
 
-    global libccalltest = LazyLibrary(joinpath(private_libdir, "libccalltest.$(Libdl.dlext)"), default_rtld_flags, LazyLibrary[], hdl -> global libccalltest_loaded = true)
-    global libccalltestdep = LazyLibrary(joinpath(private_libdir, "libccalltestdep.$(Libdl.dlext)"), default_rtld_flags, [libccalltest], hdl -> global libccalltestdep_loaded = true)
+    global libccalltest = LazyLibrary(lct_path, default_rtld_flags, LazyLibrary[], hdl -> global libccalltest_loaded = true)
+    global libccalltestdep = LazyLibrary(lctd_path, default_rtld_flags, [libccalltest], hdl -> global libccalltestdep_loaded = true)
 
     # Creating `LazyLibrary` doesn't actually load anything
     @test !libccalltest_loaded
@@ -318,7 +336,7 @@ end
     close_libs()
 
     # Test that `dlpath()` works
-    @test dlpath(libccalltest) == libccalltest.name
+    @test dlpath(libccalltest) == realpath(libccalltest.name)
     @test libccalltest_loaded
     close_libs()
-end
+end; end
