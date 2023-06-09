@@ -934,12 +934,14 @@ end
 function getindex(v::AbstractRange{T}, i::Integer) where T
     @inline
     i isa Bool && throw(ArgumentError("invalid index: $i of type Bool"))
-    ret = convert(T, first(v) + (i - oneunit(i))*step_hp(v))
-    ok = ifelse(step(v) > zero(step(v)),
-                (ret <= last(v)) & (ret >= first(v)),
-                (ret <= first(v)) & (ret >= last(v)))
-    @boundscheck ((i > 0) & ok) || throw_boundserror(v, i)
-    ret
+    @boundscheck checkbounds(v, i)
+    convert(T, first(v) + (i - oneunit(i))*step_hp(v))
+end
+
+function checkbounds(::Type{Bool}, v::StepRange{<:BitInteger, <:BitInteger}, i::BitInteger)
+    @inline
+    res = widemul(step(v), i-oneunit(i)) + first(v)
+    (0 < i) & ifelse(0 < step(v), res <= last(v), res >= last(v))
 end
 
 function getindex(r::Union{StepRangeLen,LinRange}, i::Integer)
