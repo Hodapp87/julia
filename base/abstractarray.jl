@@ -1290,8 +1290,7 @@ end
 
 function unsafe_getindex(A::AbstractArray, I...)
     @inline
-    @inbounds r = getindex(A, I...)
-    r
+    @inbounds getindex(A, I...)
 end
 
 struct CanonicalIndexError <: Exception

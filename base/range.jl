@@ -903,6 +903,42 @@ end
 
 isassigned(r::AbstractRange, i::Int) = firstindex(r) <= i <= lastindex(r)
 
+function getindex(v::AbstractRange{T}, i::Integer) where T
+    @inline
+    i isa Bool && throw(ArgumentError("invalid index: $i of type Bool"))
+    @boundscheck checkbounds(v, i)
+    unsafe_getindex(v, i)
+end
+
+checkbounds(::Type{Bool}, v::OneTo, i::Integer) = 0 < i <= v.stop
+function checkbounds(::Type{Bool}, v::StepRange{<:BitInteger, <:BitInteger}, i::BitInteger)
+    @inline
+    res = widemul(step(v), i-oneunit(i)) + first(v)
+    (0 < i) & ifelse(0 < step(v), res <= last(v), res >= last(v))
+end
+
+# This is separate to make it useful even when running with --check-bounds=yes
+unsafe_getindex(r::AbstractRange, i::Integer) =
+    _not_bool_unsafe_getindex(r, i)
+unsafe_getindex(_::AbstractRange, i::Bool) =
+    throw(ArgumentError("invalid index: $i of type Bool"))
+
+_not_bool_unsafe_getindex(r::AbstractRange{T}, i::Integer) where T =
+    convert(T, first(r) + (i - oneunit(i))*step_hp(r))
+_not_bool_unsafe_getindex(r::StepRangeLen{T}, i::Integer) where T =
+    T(r.ref + (i - r.offset)*r.step)
+_not_bool_unsafe_getindex(_::OneTo{T}, i::Integer) where T =
+    convert(T, i)
+_not_bool_unsafe_getindex(r::LinRange, i::Integer) =
+    lerpi(i-oneunit(i), r.lendiv, r.start, r.stop)
+
+function lerpi(j::Integer, d::Integer, a::T, b::T) where T
+    @inline
+    t = j/d # ∈ [0,1]
+    # compute approximately fma(t, b, -fma(t, a, a))
+    return T((1-t)*a + t*b)
+end
+
 _in_unit_range(v::UnitRange, val, i::Integer) = i > 0 && val <= v.stop && val >= v.start
 
 function getindex(v::UnitRange{T}, i::Integer) where T
@@ -913,67 +949,17 @@ function getindex(v::UnitRange{T}, i::Integer) where T
     val
 end
 
-const OverflowSafe = Union{Bool,Int8,Int16,Int32,Int64,Int128,
-                           UInt8,UInt16,UInt32,UInt64,UInt128}
-
-function getindex(v::UnitRange{T}, i::Integer) where {T<:OverflowSafe}
+function getindex(v::UnitRange{T}, i::Integer) where {T<:BitInteger}
     @inline
-    i isa Bool && throw(ArgumentError("invalid index: $i of type Bool"))
     val = v.start + (i - oneunit(i))
     @boundscheck _in_unit_range(v, val, i) || throw_boundserror(v, i)
     val % T
-end
-
-function getindex(v::OneTo{T}, i::Integer) where T
-    @inline
-    i isa Bool && throw(ArgumentError("invalid index: $i of type Bool"))
-    @boundscheck ((i > 0) & (i <= v.stop)) || throw_boundserror(v, i)
-    convert(T, i)
-end
-
-function getindex(v::AbstractRange{T}, i::Integer) where T
-    @inline
-    i isa Bool && throw(ArgumentError("invalid index: $i of type Bool"))
-    @boundscheck checkbounds(v, i)
-    convert(T, first(v) + (i - oneunit(i))*step_hp(v))
-end
-
-function checkbounds(::Type{Bool}, v::StepRange{<:BitInteger, <:BitInteger}, i::BitInteger)
-    @inline
-    res = widemul(step(v), i-oneunit(i)) + first(v)
-    (0 < i) & ifelse(0 < step(v), res <= last(v), res >= last(v))
-end
-
-function getindex(r::Union{StepRangeLen,LinRange}, i::Integer)
-    @inline
-    i isa Bool && throw(ArgumentError("invalid index: $i of type Bool"))
-    @boundscheck checkbounds(r, i)
-    unsafe_getindex(r, i)
-end
-
-# This is separate to make it useful even when running with --check-bounds=yes
-function unsafe_getindex(r::StepRangeLen{T}, i::Integer) where T
-    i isa Bool && throw(ArgumentError("invalid index: $i of type Bool"))
-    u = i - r.offset
-    T(r.ref + u*r.step)
 end
 
 function _getindex_hiprec(r::StepRangeLen, i::Integer)  # without rounding by T
     i isa Bool && throw(ArgumentError("invalid index: $i of type Bool"))
     u = i - r.offset
     r.ref + u*r.step
-end
-
-function unsafe_getindex(r::LinRange, i::Integer)
-    i isa Bool && throw(ArgumentError("invalid index: $i of type Bool"))
-    lerpi(i-oneunit(i), r.lendiv, r.start, r.stop)
-end
-
-function lerpi(j::Integer, d::Integer, a::T, b::T) where T
-    @inline
-    t = j/d # ∈ [0,1]
-    # compute approximately fma(t, b, -fma(t, a, a))
-    return T((1-t)*a + t*b)
 end
 
 getindex(r::AbstractRange, ::Colon) = copy(r)
